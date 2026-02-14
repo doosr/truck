@@ -10,8 +10,6 @@
         rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 
     <style>
@@ -1416,6 +1414,34 @@
         // Pour trouver l'IP: connectez-vous au WiFi "Redmi" puis regardez le Serial Monitor
         const ESP32_IP = '192.168.4.1';  // IP par défaut du mode AP ESP32
         const BACKEND_URL = '/api/telemetry'; // API relative pour Vercel / Local
+
+        // --- SÉCURITÉ PROTOCOLE ---
+        if (window.location.protocol === 'file:') {
+            document.addEventListener('DOMContentLoaded', () => {
+                const warning = document.createElement('div');
+                warning.style.cssText = `
+                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                    background: rgba(0,0,0,0.95); z-index: 10000;
+                    display: flex; flex-direction: column; align-items: center; justify-content: center;
+                    color: white; font-family: 'Orbitron', sans-serif; text-align: center; padding: 20px;
+                `;
+                warning.innerHTML = `
+                    <h1 style="color: #ff3b30; font-size: 2.5rem; margin-bottom: 20px;">⚠️ ERREUR DE PROTOCOLE</h1>
+                    <p style="font-size: 1.2rem; max-width: 600px; line-height: 1.6;">
+                        Vous avez ouvert le fichier directement via votre explorateur de fichiers. 
+                        Cela bloque l'accès aux données (CORS).
+                    </p>
+                    <div style="margin-top: 30px; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;">
+                        <p style="margin-bottom: 15px; opacity: 0.8;">Veuillez utiliser l'URL suivante dans votre navigateur :</p>
+                        <code style="font-size: 2rem; color: #007AFF;">http://localhost:3000</code>
+                    </div>
+                    <p style="margin-top: 40px; font-size: 0.9rem; opacity: 0.6;">
+                        Assurez-vous que le serveur backend est lancé (npm start).
+                    </p>
+                `;
+                document.body.appendChild(warning);
+            });
+        }
         let dataSource = localStorage.getItem('dataSource') || 'esp32'; // 'esp32' ou 'adafruit'
         const FETCH_INTERVAL = 500; // ms
 
@@ -1440,20 +1466,6 @@
         let odometer = parseFloat(localStorage.getItem('odometer')) || 0;
         let lastLat = null;
         let lastLon = null;
-        let unityInstance = null; // Will be set by Unity loader
-
-        /**
-         * Send current telemetry to Unity Digital Twin
-         */
-        function updateUnityTwin(data) {
-            if (unityInstance) {
-                try {
-                    unityInstance.SendMessage('ForkliftManager', 'UpdateTelemetry', JSON.stringify(data));
-                } catch (e) {
-                    console.warn('[Unity] Bridge non encore prêt');
-                }
-            }
-        }
 
         /**
          * Calculate distance between two GPS points in Km (Haversine formula)
@@ -1870,6 +1882,15 @@
         // Fetch telemetry data
         async function fetchTelemetry() {
             try {
+                // Bloquer le HTTP non sécurisé si on est sur HTTPS
+                if (window.location.protocol === 'https:' && dataSource !== 'adafruit') {
+                    console.warn('[Security] Blocage de la requête HTTP non sécurisée sur un site HTTPS. Passage auto à Adafruit.');
+                    dataSource = 'adafruit';
+                    localStorage.setItem('dataSource', 'adafruit');
+                    const radio = document.getElementById('radioAdafruit');
+                    if (radio) radio.checked = true;
+                }
+
                 const url = dataSource === 'adafruit' ? BACKEND_URL : `http://${ESP32_IP}/telemetry`;
                 const response = await fetch(url);
                 if (response.ok) {
@@ -1877,9 +1898,6 @@
 
                     // Update dashboard first using current telemetryData as "previous" state
                     updateDashboard(data);
-
-                    // Update Unity Twin
-                    updateUnityTwin(data);
 
                     // Now update the global telemetryData for the next cycle
                     telemetryData = data;
@@ -3003,108 +3021,104 @@
                 style="margin-top: 15px; font-size: 0.75rem; color: var(--accent-blue); background: rgba(0,122,255,0.1); padding: 10px; border-radius: 5px;">
                 ℹ️ Utilisez 'Adafruit IO' pour voir le chariot à distance via Internet.
             </div>
-            <!-- Calibration Section -->
-            <div id="sectionCalib" style="display: none;">
-                <div class="calib-selector">
-                    <div class="calib-tab active" id="tabFuel" onclick="switchCalibTab('fuel')">⛽ Carburant</div>
-                    <div class="calib-tab" id="tabTemp" onclick="switchCalibTab('temp')">🌡️ Température</div>
-                </div>
+        </div>
 
-                <!-- Fuel Calibration -->
-                <div class="calibration-group" id="groupFuel">
-                    <div class="color-label" style="font-size: 0.8rem; opacity: 0.8;">Carburant (Actuel: <span
-                            id="rawFuelRes" class="calib-raw-value">0</span> Ω)</div>
-                    <div class="calib-row">
-                        <span>Capacité (L)</span>
-                        <input type="number" class="calib-input" id="calibFuelTank" value="60"
+        <!-- Calibration Section -->
+        <div id="sectionCalib" style="display: none;">
+            <div class="calib-selector">
+                <div class="calib-tab active" id="tabFuel" onclick="switchCalibTab('fuel')">⛽ Carburant</div>
+                <div class="calib-tab" id="tabTemp" onclick="switchCalibTab('temp')">🌡️ Température</div>
+            </div>
+
+            <!-- Fuel Calibration -->
+            <div class="calibration-group" id="groupFuel">
+                <div class="color-label" style="font-size: 0.8rem; opacity: 0.8;">Carburant (Actuel: <span
+                        id="rawFuelRes" class="calib-raw-value">0</span> Ω)</div>
+                <div class="calib-row">
+                    <span>Capacité (L)</span>
+                    <input type="number" class="calib-input" id="calibFuelTank" value="60" onchange="saveCalibration()">
+                </div>
+                <div class="calib-row">
+                    <span>Vide (Min Ω)</span>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <input type="number" class="calib-input" id="calibFuelEmpty" value="12" placeholder="Ω"
                             onchange="saveCalibration()">
-                    </div>
-                    <div class="calib-row">
-                        <span>Vide (Min Ω)</span>
-                        <div style="display: flex; align-items: center; gap: 5px;">
-                            <input type="number" class="calib-input" id="calibFuelEmpty" value="12" placeholder="Ω"
-                                onchange="saveCalibration()">
-                            <button class="calib-btn" onclick="setCurrentAs('fuelEmpty')">GET</button>
-                        </div>
-                    </div>
-                    <div class="calib-row">
-                        <span>Plein (Max Ω)</span>
-                        <div style="display: flex; align-items: center; gap: 5px;">
-                            <input type="number" class="calib-input" id="calibFuelFull" value="166" placeholder="Ω"
-                                onchange="saveCalibration()">
-                            <button class="calib-btn" onclick="setCurrentAs('fuelFull')">GET</button>
-                        </div>
+                        <button class="calib-btn" onclick="setCurrentAs('fuelEmpty')">GET</button>
                     </div>
                 </div>
-
-                <!-- Temp Calibration (Resistive) -->
-                <div class="calibration-group" id="groupTemp" style="display: none;">
-                    <div class="color-label" style="font-size: 0.8rem; opacity: 0.8;">Température (Actuel: <span
-                            id="rawTempRes" class="calib-raw-value">0</span> Ω)</div>
-
-                    <div class="calib-row">
-                        <span>BETA Coeff.</span>
-                        <input type="number" class="calib-input" id="calibTempBeta" value="3950"
+                <div class="calib-row">
+                    <span>Plein (Max Ω)</span>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <input type="number" class="calib-input" id="calibFuelFull" value="166" placeholder="Ω"
                             onchange="saveCalibration()">
+                        <button class="calib-btn" onclick="setCurrentAs('fuelFull')">GET</button>
                     </div>
-                    <div class="calib-row">
-                        <span>R0 (25°C)</span>
-                        <div style="display: flex; align-items: center; gap: 5px;">
-                            <input type="number" class="calib-input" id="calibTempR0" value="3025"
-                                onchange="saveCalibration()">
-                            <button class="calib-btn" onclick="setCurrentAs('tempR0')">GET</button>
-                        </div>
-                    </div>
-                    <div class="calib-row">
-                        <span>Offset (°C)</span>
-                        <input type="number" class="calib-input" id="calibTempOffset" value="0"
-                            onchange="saveCalibration()">
-                    </div>
-                </div>
-
-                <div style="margin-top: 25px;">
-                    <button class="theme-btn"
-                        style="width: 100%; text-align: center; background: rgba(255, 59, 48, 0.2); border-color: #ff3b30;"
-                        onclick="calibrateSensors()">
-                        🧹 RESET DASHBOARD
-                    </button>
                 </div>
             </div>
-        </div>
 
-        <!-- Scroll Indicator -->
-        <div class="scroll-indicator">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 5v14M19 12l-7 7-7-7" />
-            </svg>
-        </div>
+            <!-- Temp Calibration (Resistive) -->
+            <div class="calibration-group" id="groupTemp" style="display: none;">
+                <div class="color-label" style="font-size: 0.8rem; opacity: 0.8;">Température (Actuel: <span
+                        id="rawTempRes" class="calib-raw-value">0</span> Ω)</div>
 
-        <!-- Charts Section -->
-        <div class="charts-section">
-            <h2>📊 Historique des Données</h2>
-            <div class="charts-grid">
-                <div class="chart-card">
-                    <h3>🌡️ Température Moteur</h3>
-                    <canvas id="tempChart"></canvas>
+                <div class="calib-row">
+                    <span>BETA Coeff.</span>
+                    <input type="number" class="calib-input" id="calibTempBeta" value="3950"
+                        onchange="saveCalibration()">
                 </div>
-                <div class="chart-card">
-                    <h3>🛢️ Pression d'Huile</h3>
-                    <canvas id="oilChart"></canvas>
+                <div class="calib-row">
+                    <span>R0 (25°C)</span>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <input type="number" class="calib-input" id="calibTempR0" value="3025"
+                            onchange="saveCalibration()">
+                        <button class="calib-btn" onclick="setCurrentAs('tempR0')">GET</button>
+                    </div>
                 </div>
-                <div class="chart-card">
-                    <h3>⛽ Niveau Carburant</h3>
-                    <canvas id="fuelChart"></canvas>
+                <div class="calib-row">
+                    <span>Offset (°C)</span>
+                    <input type="number" class="calib-input" id="calibTempOffset" value="0"
+                        onchange="saveCalibration()">
                 </div>
             </div>
-        </div>
 
-        <!-- 3D Model Container (Hidden/Background) -->
-        <div class="model-viewer"
-            style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 600px; height: 400px; z-index: -1; opacity: 0.3; pointer-events: none;">
-            <canvas id="modelCanvas"></canvas>
+            <div style="margin-top: 25px;">
+                <button class="theme-btn"
+                    style="width: 100%; text-align: center; background: rgba(255, 59, 48, 0.2); border-color: #ff3b30;"
+                    onclick="calibrateSensors()">
+                    🧹 RESET DASHBOARD
+                </button>
+            </div>
         </div>
+    </div>
 
-        <!-- Template for 3D model if needed -->
+    <!-- Scroll Indicator -->
+    <div class="scroll-indicator">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M19 12l-7 7-7-7" />
+        </svg>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="charts-section"
+        style="margin-top: 100px; border-top: 2px solid var(--glass-border); padding-top: 60px; margin-bottom: 100px;">
+        <h2 style="font-size: 2rem; color: var(--accent-gti); margin-bottom: 40px;">📊 Historique des Données</h2>
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h3>🌡️ Température Moteur</h3>
+                <canvas id="tempChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>🛢️ Pression d'Huile</h3>
+                <canvas id="oilChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>⛽ Niveau Carburant</h3>
+                <canvas id="fuelChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Template for 3D model if needed -->
 </body>
 
 </html>
