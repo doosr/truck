@@ -1389,7 +1389,7 @@
         // ESP32 IP - MODIFIEZ CETTE VALEUR SELON L'IP DE VOTRE ESP32
         // Pour trouver l'IP: connectez-vous au WiFi "Redmi" puis regardez le Serial Monitor
         const ESP32_IP = '192.168.4.1';  // IP par défaut du mode AP ESP32
-        const BACKEND_URL = 'https://truck-five.vercel.app/api/telemetry'; // Production Vercel URL
+        const BACKEND_URL = '/api/telemetry'; // API relative pour Vercel / Local
         let dataSource = localStorage.getItem('dataSource') || 'esp32'; // 'esp32' ou 'adafruit'
         const FETCH_INTERVAL = 500; // ms
 
