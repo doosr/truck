@@ -1414,6 +1414,20 @@
         let odometer = parseFloat(localStorage.getItem('odometer')) || 0;
         let lastLat = null;
         let lastLon = null;
+        let unityInstance = null; // Will be set by Unity loader
+
+        /**
+         * Send current telemetry to Unity Digital Twin
+         */
+        function updateUnityTwin(data) {
+            if (unityInstance) {
+                try {
+                    unityInstance.SendMessage('ForkliftManager', 'UpdateTelemetry', JSON.stringify(data));
+                } catch (e) {
+                    console.warn('[Unity] Bridge non encore prêt');
+                }
+            }
+        }
 
         /**
          * Calculate distance between two GPS points in Km (Haversine formula)
