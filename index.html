@@ -1,0 +1,3067 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GTI Dashboard - Chariot Élévateur</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #000000;
+            --bg-glass: rgba(20, 20, 20, 0.8);
+            --accent-gti: #ff0033;
+            --accent-white: #ffffff;
+            --accent-blue: #00d4ff;
+            --text-primary: #f5f5f7;
+            --text-secondary: #86868b;
+            --glow-red: rgba(255, 0, 51, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: radial-gradient(ellipse at center, #2a0a0a 0%, #000000 70%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            width: 100vw;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            position: relative;
+        }
+
+        /* Main Dashboard Container */
+        .dashboard-container {
+            width: 100%;
+            max-width: 1400px;
+            height: 600px;
+            display: grid;
+            grid-template-columns: 300px 1fr 300px;
+            gap: 40px;
+            padding: 40px;
+            align-items: center;
+            margin-top: 30px;
+        }
+
+        /* Circular Gauge Shared Styles */
+        .gauge-container {
+            position: relative;
+            width: 250px;
+            height: 250px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .gauge-circle {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .gauge-bg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 230px;
+            height: 230px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(40, 40, 40, 0.8) 0%, rgba(15, 15, 15, 0.9) 100%);
+            border: 3px solid var(--glass-border);
+            box-shadow:
+                inset 0 0 30px rgba(0, 0, 0, 0.8),
+                0 0 40px rgba(255, 0, 51, 0.1);
+        }
+
+        .gauge-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 10;
+        }
+
+        .gauge-value {
+            font-size: 3.5rem;
+            font-weight: 900;
+            font-family: 'Orbitron', monospace;
+            line-height: 1;
+            color: var(--text-primary);
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+        }
+
+        .gauge-unit {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            text-transform: lowercase;
+            margin-top: 5px;
+            font-weight: 600;
+        }
+
+        /* SVG Arc */
+        .gauge-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: rotate(-135deg);
+        }
+
+        .gauge-arc-bg {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.05);
+            stroke-width: 8;
+        }
+
+        .gauge-arc {
+            fill: none;
+            stroke: var(--accent-gti);
+            stroke-width: 8;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.5s ease;
+            filter: drop-shadow(0 0 8px var(--glow-red));
+        }
+
+        /* Central Tachometer */
+        .tachometer-container {
+            position: relative;
+            width: 450px;
+            height: 450px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+        }
+
+        .tacho-bg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 420px;
+            height: 420px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(60, 60, 60, 0.6) 0%, rgba(10, 10, 10, 0.95) 70%);
+            border: 4px solid var(--glass-border);
+            box-shadow:
+                inset 0 0 60px rgba(0, 0, 0, 0.9),
+                0 0 80px var(--glow-red);
+        }
+
+        .tacho-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 400px;
+            height: 400px;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--glow-red) 0%, transparent 70%);
+            opacity: 0.3;
+            animation: pulseGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes pulseGlow {
+
+            0%,
+            100% {
+                opacity: 0.2;
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            50% {
+                opacity: 0.4;
+                transform: translate(-50%, -50%) scale(1.05);
+            }
+        }
+
+        .tacho-content {
+            position: absolute;
+            top: 52%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+        }
+
+        .tacho-brand {
+            font-size: 2rem;
+            font-weight: 900;
+            font-family: 'Orbitron', monospace;
+            color: var(--text-secondary);
+            letter-spacing: 0.3em;
+            margin-bottom: -10px;
+        }
+
+        .tacho-model {
+            font-size: 5rem;
+            font-weight: 900;
+            font-family: 'Orbitron', monospace;
+            color: var(--accent-gti);
+            text-shadow: 0 0 30px var(--glow-red);
+            line-height: 1;
+            margin-bottom: 10px;
+        }
+
+        .tacho-rpm-value {
+            font-size: 3rem;
+            font-family: 'Orbitron', monospace;
+            font-weight: 900;
+            color: var(--text-primary);
+            margin: 5px 0;
+            line-height: 1;
+        }
+
+        .tacho-rpm {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        /* Tacho SVG Marks */
+        .tacho-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .tacho-mark {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.3);
+            stroke-width: 3;
+            stroke-linecap: round;
+        }
+
+        .tacho-mark-red {
+            stroke: var(--accent-gti);
+            stroke-width: 4;
+        }
+
+        .tacho-needle {
+            fill: var(--accent-gti);
+            filter: drop-shadow(0 0 10px var(--glow-red));
+            transform-origin: center;
+            transition: transform 0.3s ease-out;
+        }
+
+        /* Bottom Info Bar */
+        .info-bar {
+            position: relative;
+            margin: -40px auto 40px;
+            display: flex;
+            gap: 60px;
+            align-items: center;
+            padding: 15px 50px;
+            background: var(--bg-glass);
+            border-radius: 40px;
+            border: 1px solid var(--glass-border);
+            -webkit-backdrop-filter: blur(20px);
+            backdrop-filter: blur(20px);
+            width: fit-content;
+            z-index: 10;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .info-icon {
+            width: 28px;
+            height: 28px;
+            opacity: 0.7;
+        }
+
+        .info-data {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            font-family: 'Orbitron', monospace;
+            color: var(--text-primary);
+        }
+
+        .info-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        /* Fuel Reserve Indicator */
+        .fuel-reserve-indicator {
+            position: absolute;
+            bottom: 1050px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 165, 0, 0.15);
+            padding: 15px 30px;
+            border-radius: 20px;
+            border: 2px solid #ffa500;
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            animation: reservePulse 2s ease-in-out infinite;
+            z-index: 100;
+        }
+
+        .reserve-icon {
+            width: 32px;
+            height: 32px;
+        }
+
+        .reserve-text {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #ffa500;
+            letter-spacing: 2px;
+        }
+
+        @keyframes reservePulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: translateX(-50%) scale(1);
+            }
+
+            50% {
+                opacity: 0.7;
+                transform: translateX(-50%) scale(1.05);
+            }
+        }
+
+        /* Oil Warning Indicator */
+        .oil-warning-indicator {
+            position: absolute;
+            bottom: 180px;
+            /* Above fuel reserve */
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 59, 48, 0.15);
+            padding: 15px 30px;
+            border-radius: 20px;
+            border: 2px solid #ff3b30;
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            animation: reservePulse 1s ease-in-out infinite;
+            /* Faster pulse for critical */
+            z-index: 100;
+        }
+
+        /* Speed Display (now top right) */
+        .speed-display {
+            position: absolute;
+            top: 45px;
+            right: 220px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 100;
+        }
+
+        .speed-box {
+            background: #ffffff;
+            color: #000000;
+            padding: 8px 15px;
+            border-radius: 12px;
+            font-family: 'Orbitron', monospace;
+            box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 80px;
+        }
+
+        .speed-value {
+            font-size: 2.2rem;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .speed-unit {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            font-weight: 700;
+            text-transform: lowercase;
+        }
+
+        /* Map Section Styles */
+        .map-section {
+            grid-column: 1 / -1;
+            height: 300px;
+            background: var(--bg-glass);
+            border-radius: 20px;
+            border: 2px solid var(--glass-border);
+            overflow: hidden;
+            position: relative;
+            margin-top: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+        }
+
+        .map-overlay {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            color: var(--text-primary);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(5px);
+        }
+
+        /* Top Info Panel */
+        .top-info-panel {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px 25px;
+            border-radius: 16px;
+            border: 1px solid var(--glass-border);
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+        }
+
+        .info-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .info-icon-small {
+            width: 20px;
+            height: 20px;
+            opacity: 0.7;
+        }
+
+        .info-text {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .info-value-highlight {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-left: 5px;
+        }
+
+        /* Warning Icons */
+        .warning-strip {
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            padding: 12px 30px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 30px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .warning-icon {
+            width: 24px;
+            height: 24px;
+            opacity: 0.2;
+            transition: all 0.3s ease;
+        }
+
+        .warning-icon.active {
+            opacity: 1;
+            filter: drop-shadow(0 0 8px currentColor);
+        }
+
+        .warning-icon.blink {
+            animation: blink 0.8s infinite;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+                stroke-width: 3;
+            }
+
+            50% {
+                opacity: 0;
+                stroke-width: 2;
+            }
+        }
+
+        /* Color Customization Panel */
+        .color-panel {
+            position: fixed;
+            bottom: 40px;
+            left: 40px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 25px;
+            border-radius: 20px;
+            border: 1px solid var(--accent-gti);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            max-width: 350px;
+            z-index: 1000;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+        }
+
+        .color-panel-header {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .theme-presets {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .theme-btn {
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .theme-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .theme-btn.active {
+            border-color: var(--accent-gti);
+            background: rgba(255, 59, 48, 0.2);
+        }
+
+        .color-picker-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .calibration-group {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .calib-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        .calib-input {
+            width: 70px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 2px 5px;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .calib-btn {
+            background: var(--accent-gti);
+            border: none;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+
+        .calib-btn:hover {
+            opacity: 0.8;
+        }
+
+        .calib-raw-value {
+            color: var(--accent-blue);
+            font-weight: bold;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .calib-selector {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+
+        .calib-tab {
+            flex: 1;
+            padding: 6px;
+            font-size: 0.75rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .calib-tab.active {
+            background: rgba(var(--accent-rgb), 0.2);
+            border-color: var(--accent-gti);
+            color: white;
+        }
+
+        .color-picker-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .color-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .color-input {
+            width: 50px;
+            height: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            cursor: pointer;
+            background: transparent;
+        }
+
+        .panel-toggle {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid var(--glass-border);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 99;
+            transition: all 0.3s ease;
+        }
+
+        .panel-toggle:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: scale(1.1);
+            border-color: var(--accent-gti);
+        }
+
+        .panel-toggle.secondary {
+            left: 30px;
+        }
+
+        .panel-toggle svg {
+            width: 24px;
+            height: 24px;
+            stroke: var(--text-primary);
+        }
+
+        .toggle-label {
+            position: absolute;
+            top: -20px;
+            font-size: 0.65rem;
+            font-weight: 800;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            white-space: nowrap;
+        }
+
+        /* Settings Tabs */
+        .settings-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        }
+
+        .settings-tab {
+            flex: 1;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            text-align: center;
+            font-size: 0.8rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .settings-tab.active {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--accent-gti);
+            color: white;
+        }
+
+        /* Notification System */
+        .notification-container {
+            position: fixed;
+            top: 100px;
+            right: 40px;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            pointer-events: none;
+            width: 100%;
+            max-width: 400px;
+            align-items: flex-end;
+        }
+
+        .notification-toast {
+            background: rgba(20, 20, 20, 0.95);
+            border: 1px solid var(--glass-border);
+            border-left: 4px solid var(--accent-blue);
+            padding: 16px 20px;
+            border-radius: 12px;
+            color: var(--text-primary);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            animation: slideInFromRight 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .notification-toast.warning {
+            border-left-color: #ffa500;
+        }
+
+        .notification-toast.danger {
+            border-left-color: #ff3b30;
+        }
+
+        .notification-toast.success {
+            border-left-color: var(--accent-success);
+        }
+
+        @keyframes slideInFromRight {
+            from {
+                transform: translateX(100px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeOut {
+            to {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 1400px) {
+            .dashboard-container {
+                grid-template-columns: 250px 1fr 250px;
+                gap: 30px;
+            }
+
+            .gauge-container {
+                width: 220px;
+                height: 220px;
+            }
+
+            .tachometer-container {
+                width: 400px;
+                height: 400px;
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto;
+                height: auto;
+                gap: 20px;
+            }
+
+            .info-bar {
+                position: relative;
+                bottom: auto;
+                margin-top: 20px;
+            }
+
+            .speed-display {
+                position: relative;
+                bottom: auto;
+                right: auto;
+                text-align: center;
+                margin-top: 20px;
+            }
+        }
+
+        /* Notification History Container */
+        .history-btn {
+            position: absolute;
+            top: 40px;
+            right: 40px;
+            padding: 12px 24px;
+            background: var(--bg-glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9rem;
+            cursor: pointer;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+        }
+
+        .history-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+        }
+
+        .history-modal {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 350px;
+            height: 100vh;
+            background: var(--bg-glass);
+            border-left: 1px solid var(--glass-border);
+            -webkit-backdrop-filter: blur(30px);
+            backdrop-filter: blur(30px);
+            z-index: 1000;
+            padding: 30px;
+            transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .history-modal.active {
+            right: 0;
+            box-shadow: -20px 0 50px rgba(0, 0, 0, 0.5);
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            border-bottom: 1px solid var(--glass-border);
+            padding-bottom: 15px;
+        }
+
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding-right: 5px;
+        }
+
+        .history-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .history-list::-webkit-scrollbar-thumb {
+            background: var(--glass-border);
+            border-radius: 2px;
+        }
+
+        .history-item {
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            border-left: 4px solid var(--accent-blue);
+        }
+
+        .history-item.danger {
+            border-left-color: var(--accent-gti);
+        }
+
+        .history-item.warning {
+            border-left-color: #ffa500;
+        }
+
+        .history-item.success {
+            border-left-color: #34c759;
+        }
+
+        .history-item-time {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+
+        .history-item-title {
+            font-weight: bold;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9rem;
+            margin-bottom: 4px;
+        }
+
+        .history-item-msg {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .close-history {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 2.5rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        /* Reset Hours Button */
+        .reset-hours-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-secondary);
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.65rem;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .reset-hours-btn:hover {
+            background: rgba(255, 0, 51, 0.1);
+            border-color: var(--accent-gti);
+            color: white;
+            box-shadow: 0 0 10px rgba(255, 0, 51, 0.2);
+        }
+
+        /* Charts Section */
+        .charts-section {
+            width: 100%;
+            max-width: 1400px;
+            margin: 40px auto;
+            padding: 30px 20px;
+        }
+
+        .charts-section h2 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.8rem;
+            text-align: center;
+            margin-bottom: 30px;
+            color: var(--accent-gti);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 25px;
+            width: 100%;
+        }
+
+        .chart-card {
+            background: var(--bg-glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 15px;
+            padding: 20px;
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .chart-card:hover {
+            border-color: var(--accent-gti);
+            box-shadow: 0 8px 32px rgba(255, 0, 51, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .chart-card h3 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            color: var(--text-primary);
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .chart-card canvas {
+            width: 100% !important;
+            height: 250px !important;
+        }
+
+        /* Scroll indicator */
+        .scroll-indicator {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            20%,
+            50%,
+            80%,
+            100% {
+                transform: translateX(-50%) translateY(0);
+            }
+
+            40% {
+                transform: translateX(-50%) translateY(-10px);
+            }
+
+            60% {
+                transform: translateX(-50%) translateY(-5px);
+            }
+        }
+
+        .scroll-indicator svg {
+            width: 30px;
+            height: 30px;
+            stroke: var(--accent-gti);
+            filter: drop-shadow(0 0 10px rgba(255, 0, 51, 0.5));
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .charts-section h2 {
+                font-size: 1.4rem;
+            }
+        }
+
+        /* Map Section Styles (Moved out of Grid) */
+        .map-section {
+            width: 100%;
+            max-width: 1400px;
+            height: 350px;
+            margin: 20px auto;
+            position: relative;
+            border-radius: 30px;
+            overflow: hidden;
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .map-overlay {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            z-index: 1000;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Top Info Panel -->
+    <div class="top-info-panel">
+        <div class="info-row">
+            <svg class="info-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+            </svg>
+            <span class="info-text">Démarrage:</span>
+            <span class="info-value-highlight" id="startTimeDisplay">--:--</span>
+        </div>
+        <div class="info-row">
+            <svg class="info-icon-small" viewBox="0 0 24 24" fill="none" stroke="#ffa500" stroke-width="2">
+                <path d="M3 12h18M3 6h18M3 18h18" />
+            </svg>
+            <span class="info-text">Consommation:</span>
+            <span class="info-value-highlight" id="fuelConsumptionDisplay" style="color: #ffa500;">0 L</span>
+        </div>
+        <div class="info-row">
+            <svg class="info-icon-small" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2">
+                <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z" />
+            </svg>
+            <span class="info-text">Pression Huile:</span>
+            <span class="info-value-highlight" id="oilPressureDisplay" style="color: #ff3b30;">0.0 Bar</span>
+        </div>
+        <div class="info-row">
+            <svg class="info-icon-small" viewBox="0 0 24 24" fill="none" stroke="#00d4ff" stroke-width="2">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                <circle cx="12" cy="10" r="3" />
+            </svg>
+            <span class="info-text">Kilométrage:</span>
+            <span class="info-value-highlight" id="odometerDisplay" style="color: #00d4ff;">0,0 km</span>
+        </div>
+        <!-- Export Button -->
+        <div class="info-row" style="margin-top: 10px; cursor: pointer;" onclick="exportHistory()">
+            <svg class="info-icon-small" viewBox="0 0 24 24" fill="none" stroke="#00d4ff" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+            </svg>
+            <span class="info-text" style="color: #00d4ff; font-weight: bold;">EXP. HISTORIQUE</span>
+        </div>
+    </div>
+
+
+    <!-- Warning Strip -->
+    <div class="warning-strip">
+        <svg class="warning-icon" id="engineIcon" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2">
+            <path
+                d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+        </svg>
+        <svg class="warning-icon" id="oilIcon" viewBox="0 0 24 24" fill="none" stroke="#ffa500" stroke-width="2">
+            <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z" />
+        </svg>
+        <svg class="warning-icon" id="tempIcon" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2">
+            <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
+        </svg>
+        <svg class="warning-icon" id="fuelIcon" viewBox="0 0 24 24" fill="none" stroke="#ffa500" stroke-width="2">
+            <path d="M3 22v-5h3v5h12v-5h3v5M3 12h18M12 2v20" />
+        </svg>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div class="dashboard-container">
+        <!-- Left Gauge: Temperature -->
+        <div class="gauge-container">
+            <div class="gauge-circle">
+                <div class="gauge-bg"></div>
+                <svg class="gauge-svg" viewBox="0 0 250 250">
+                    <circle class="gauge-arc-bg" cx="125" cy="125" r="110" stroke-dasharray="471"
+                        stroke-dashoffset="117.75" />
+                    <circle id="tempArc" class="gauge-arc" cx="125" cy="125" r="110" stroke-dasharray="471"
+                        stroke-dashoffset="471" />
+                </svg>
+                <div class="gauge-content">
+                    <div class="gauge-value" id="tempValue">0</div>
+                    <div class="gauge-unit">°C</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Tachometer -->
+        <div class="tachometer-container">
+            <div class="tacho-bg"></div>
+            <div class="tacho-glow"></div>
+            <svg class="tacho-svg" viewBox="0 0 450 450">
+                <!-- Tick Marks -->
+                <g id="tachoMarks"></g>
+                <!-- Needle -->
+                <polygon id="tachoNeedle" class="tacho-needle" points="225,225 220,80 225,70 230,80"
+                    transform="rotate(0 225 225)" />
+                <circle cx="225" cy="225" r="15" fill="var(--accent-gti)" />
+            </svg>
+
+
+            <div class="tacho-content">
+                <div class="tacho-brand">🚜</div>
+                <div class="tacho-rpm-value" id="rpmDisplay">0</div>
+                <div class="tacho-rpm">
+                    <span>Tours</span> x1000
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Gauge: Engine Hours -->
+        <div class="gauge-container">
+            <div class="gauge-circle">
+                <div class="gauge-bg"></div>
+                <svg class="gauge-svg" viewBox="0 0 250 250">
+                    <circle class="gauge-arc-bg" cx="125" cy="125" r="110" stroke-dasharray="471"
+                        stroke-dashoffset="117.75" />
+                    <circle id="hoursArc" class="gauge-arc" cx="125" cy="125" r="110" stroke-dasharray="471"
+                        stroke-dashoffset="471" />
+                </svg>
+                <div class="gauge-content">
+                    <div class="gauge-value" id="hoursValue">0,00</div>
+                    <div class="gauge-unit">h</div>
+                    <button class="reset-hours-btn" onclick="resetEngineHours()">RESET</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Bottom Info Bar -->
+    <div class="info-bar">
+        <!-- Fuel -->
+        <div class="info-item">
+            <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            <div class="info-data">
+                <div class="info-value" id="fuelDisplay" style="color: rgb(255, 59, 48);">VIDE</div>
+                <div class="info-label">Carburant</div>
+            </div>
+        </div>
+
+        <!-- Engine Status -->
+        <div class="info-item">
+            <svg class="info-icon" id="engineStatusIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" style="stroke: var(--text-secondary);">
+                <path
+                    d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83">
+                </path>
+            </svg>
+            <div class="info-data">
+                <div class="info-value" id="engineStatusText" style="font-size: 1rem; color: var(--text-secondary);">
+                    ARRÊT</div>
+                <div class="info-label">Moteur</div>
+            </div>
+        </div>
+
+        <!-- Gear -->
+        <div class="info-item">
+            <div class="info-data">
+                <div class="info-value" id="gearDisplay" style="color: var(--text-secondary);">N <span id="debugGear"
+                        style="font-size: 0.6rem; opacity: 0.5; margin-left: 5px;">(?)</span></div>
+                <div class="info-label">Rapport</div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- NEW: Map Section at bottom -->
+    <div class="map-section">
+        <div id="map"></div>
+        <div class="map-overlay">
+            <div style="margin-bottom: 8px; border-bottom: 1px solid var(--glass-border); padding-bottom: 5px;">
+                📡 GPS: <span id="gpsStatus">RECHERCHE...</span> | 🛰️ <span id="gpsSats">0</span>
+            </div>
+            <div
+                style="font-family: 'Orbitron', monospace; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px;">
+                <div>LAT: <span id="latDisplay" style="color: var(--accent-blue);">--.------</span></div>
+                <div>LON: <span id="lonDisplay" style="color: var(--accent-blue);">--.------</span></div>
+            </div>
+            <a id="gmapsLink" href="#" target="_blank"
+                style="display: none; margin-top: 8px; color: var(--accent-success); text-decoration: none; font-size: 0.75rem; font-weight: bold; align-items: center; gap: 5px;">
+                📍 VOIR SUR GOOGLE MAPS →
+            </a>
+        </div>
+    </div>
+
+    <!-- Speed Display -->
+    <div class="speed-display">
+        <div class="speed-box">
+            <span class="speed-value" id="speedValue">0</span>
+        </div>
+        <span class="speed-unit">km/h</span>
+    </div>
+
+    <!-- Fuel Reserve Indicator (Bottom Gap) -->
+    <div class="fuel-reserve-indicator" id="fuelReserveIndicator" style="display: none;">
+        <svg class="reserve-icon" viewBox="0 0 24 24" fill="none" stroke="#ffa500" stroke-width="2">
+            <path d="M3 8h16v13H3z" />
+            <path d="M19 11h3v7h-3" />
+            <path d="M7 11v9M12 11v9" />
+        </svg>
+        <span class="reserve-text">RÉSERVE</span>
+    </div>
+
+    <!-- Oil Pressure Warning (Critical) -->
+    <div class="oil-warning-indicator" id="oilWarningIndicator" style="display: none;">
+        <svg class="reserve-icon" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2">
+            <path d="M18 12c.5 1 1 2.5 1 3.5 0 2-1.5 3.5-3.5 3.5H9c-2 0-3.5-1.5-3.5-3.5 0-1 .5-2.5 1-3.5" />
+            <path d="M8 12l2.5-3.5L12 10l1.5-3.5L16 12" />
+            <path d="M14 6h2a2 2 0 0 1 2 2v2" />
+            <path d="M4 14h2" />
+        </svg>
+        <span class="reserve-text" style="color: #ff3b30;">HUILE BASSE</span>
+    </div>
+
+
+
+    <!-- Alerts Container -->
+    <div id="notificationContainer" class="notification-container"></div>
+
+    <!-- Notification History -->
+    <button class="history-btn" onclick="toggleHistory()">
+        <span>📜 Historique</span>
+    </button>
+
+    <div id="historyModal" class="history-modal">
+        <div class="history-header">
+            <h2 style="font-family: 'Orbitron', sans-serif; font-size: 1.2rem;">HISTORIQUE</h2>
+            <button class="close-history" onclick="toggleHistory()">&times;</button>
+        </div>
+        <div id="historyList" class="history-list">
+            <!-- Stored notifications will appear here -->
+        </div>
+    </div>
+
+    <script>
+        // ESP32 IP - MODIFIEZ CETTE VALEUR SELON L'IP DE VOTRE ESP32
+        // Pour trouver l'IP: connectez-vous au WiFi "Redmi" puis regardez le Serial Monitor
+        const ESP32_IP = '192.168.4.1';  // IP par défaut du mode AP ESP32
+        const BACKEND_URL = 'https://truck-five.vercel.app/api/telemetry'; // Production Vercel URL
+        let dataSource = localStorage.getItem('dataSource') || 'esp32'; // 'esp32' ou 'adafruit'
+        const FETCH_INTERVAL = 500; // ms
+
+        let telemetryData = {
+            temp: 0,                // Température moteur (°C)
+            oil_pressure: 0,        // Pression huile (bar)
+            fuel_liters: 0,         // Carburant (litres)
+            fuel_percent: 0,        // Carburant (%)
+            rpm: 0,                 // Tours/minute (désactivé dans ESP32)
+            gear: 0,                // Vitesse (1=AV, -1=AR, 0=N)
+            engine_hours: 0,        // Heures moteur
+            engine_on: false,       // État moteur
+            lat: 0,                 // GPS Latitude
+            lon: 0,                 // GPS Longitude
+            speed: 0                // Vitesse GPS (km/h)
+        };
+
+        // Tracking pour heure de démarrage et consommation
+        let engineStartTime = null;
+        let lastFuelLevel = 0;
+        let totalFuelConsumed = 0;
+        let odometer = parseFloat(localStorage.getItem('odometer')) || 0;
+        let lastLat = null;
+        let lastLon = null;
+
+        /**
+         * Calculate distance between two GPS points in Km (Haversine formula)
+         */
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+            const R = 6371; // Earth radius in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        // Initialize tachometer marks
+        function initTachoMarks() {
+            const marksGroup = document.getElementById('tachoMarks');
+            const totalMarks = 9; // 0 to 8
+            const startAngle = -135;
+            const endAngle = 135;
+            const angleStep = (endAngle - startAngle) / totalMarks;
+
+            for (let i = 0; i <= totalMarks; i++) {
+                const angle = startAngle + (i * angleStep);
+                const radians = (angle * Math.PI) / 180;
+                const innerRadius = i >= 7 ? 160 : 170;
+                const outerRadius = i >= 7 ? 190 : 185;
+
+                const x1 = 225 + innerRadius * Math.cos(radians);
+                const y1 = 225 + innerRadius * Math.sin(radians);
+                const x2 = 225 + outerRadius * Math.cos(radians);
+                const y2 = 225 + outerRadius * Math.sin(radians);
+
+                const mark = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                mark.setAttribute('x1', x1);
+                mark.setAttribute('y1', y1);
+                mark.setAttribute('x2', x2);
+                mark.setAttribute('y2', y2);
+                mark.setAttribute('class', i >= 7 ? 'tacho-mark-red' : 'tacho-mark');
+                marksGroup.appendChild(mark);
+            }
+        }
+
+        // Update circular gauge
+        function updateGauge(arcId, value, maxValue) {
+            const arc = document.getElementById(arcId);
+            const circumference = 2 * Math.PI * 110;
+            const arcLength = (270 / 360) * circumference; // 270 degrees
+            const offset = arcLength - (value / maxValue) * arcLength;
+            arc.style.strokeDashoffset = circumference - arcLength + offset;
+        }
+
+        // Update tachometer needle
+        function updateTachometer(rpm) {
+            const needle = document.getElementById('tachoNeedle');
+            const maxRPM = 8000;
+            const clampedRPM = Math.min(rpm, maxRPM);
+            const angle = -135 + (clampedRPM / maxRPM) * 270;
+            needle.style.transform = `rotate(${angle}deg)`;
+            needle.style.transformOrigin = '225px 225px';
+        }
+
+        // Update warning icons
+        function updateWarnings(data) {
+            const tempIcon = document.getElementById('tempIcon');
+            const oilIcon = document.getElementById('oilIcon');
+            const engineIcon = document.getElementById('engineIcon'); // Check Engine
+            const fuelIcon = document.getElementById('fuelIcon');
+            const fuelReserveIndicator = document.getElementById('fuelReserveIndicator');
+
+            // === LAMP CHECK FEATURE ===
+            // If engine is OFF but we have data (Ignition ON), light up ALL warnings
+            if (!data.engine_on) {
+                tempIcon.classList.add('active');
+                oilIcon.classList.add('active');
+                engineIcon.classList.add('active');
+                fuelIcon.classList.add('active');
+
+                // Keep reserve indicator hidden unless actually needed or maybe show it too? 
+                // Usually standard dashboards show the battery/oil/engine check lights.
+                // Let's keep the digital specific indicators (like the RESERVE badge) logic separate if desired,
+                // but standard icons should be ON.
+                return;
+            }
+
+            // === NORMAL RUNNING LOGIC (Engine ON) ===
+
+            // Engine Temp (> 95°C or Sensor Error -999)
+            if (data.temp > 95 || data.temp < 0) {
+                tempIcon.classList.add('active', 'blink');
+                if (data.temp < 0) tempIcon.style.stroke = '#ff3b30'; // Red for error
+            } else {
+                tempIcon.classList.remove('active', 'blink');
+                tempIcon.style.stroke = ''; // Reset
+            }
+
+            // Oil Pressure LED & Banner
+            const oilWarningIndicator = document.getElementById('oilWarningIndicator');
+            if (data.oil_pressure < 0.5) {
+                oilIcon.classList.add('active', 'blink');
+                oilIcon.style.stroke = '#ff3b30'; // Force Red for critical
+                if (oilWarningIndicator) oilWarningIndicator.style.display = 'flex';
+            } else {
+                oilIcon.classList.remove('active', 'blink');
+                oilIcon.style.stroke = '#ffa500'; // Back to Orange/Default
+                if (oilWarningIndicator) oilWarningIndicator.style.display = 'none';
+            }
+
+            // Check Engine LED (User requested: OFF when running)
+            engineIcon.classList.remove('active', 'blink');
+
+            // Fuel (warning if < 15%)
+            if (data.fuel_percent < 15) {
+                fuelIcon.classList.add('active', 'blink');
+                fuelReserveIndicator.style.display = 'flex';
+                showNotification('⛽ Carburant en RÉSERVE!', `${Math.round(data.fuel_percent)}% restant`, 'warning');
+            } else {
+                fuelIcon.classList.remove('active', 'blink');
+                fuelReserveIndicator.style.display = 'none';
+            }
+        }
+
+
+        // Update dashboard with real ESP32 data
+        function updateDashboard(data) {
+            // Track engine state changes
+            const previousEngineState = telemetryData.engine_on;
+
+            // Détection du démarrage du moteur
+            if (data.engine_on && !previousEngineState) {
+                const now = new Date();
+                engineStartTime = now;
+                showNotification('Moteur démarré', `Démarrage à ${formatTime(now)}`, 'info');
+            }
+
+            // Détection de l'arrêt du moteur
+            if (!data.engine_on && previousEngineState && engineStartTime) {
+                const duration = Math.round((new Date() - engineStartTime) / 60000); // minutes
+                showNotification('Moteur arrêté', `Durée: ${duration} min`, 'info');
+                engineStartTime = null;
+            }
+
+            // Start of UI update and calculations
+
+            // Mise à jour de l'heure de démarrage
+            const startTimeDisplay = document.getElementById('startTimeDisplay');
+            if (engineStartTime && data.engine_on) {
+                startTimeDisplay.textContent = formatTime(engineStartTime);
+                startTimeDisplay.style.color = 'var(--accent-success)';
+            } else {
+                startTimeDisplay.textContent = '--:--';
+                startTimeDisplay.style.color = 'var(--text-secondary)';
+            }
+
+            // Mise à jour de la consommation
+            document.getElementById('fuelConsumptionDisplay').textContent =
+                totalFuelConsumed.toFixed(1) + ' L';
+
+            // Apply Calibration before updating UI
+            applyCalibration(data);
+
+            // 1. Détection de Vol de Gasoil (Après Calibration)
+            if (lastFuelLevel > 0 && data.fuel_liters < lastFuelLevel) {
+                const drop = lastFuelLevel - data.fuel_liters;
+                console.log(`[FUEL] Check: last=${lastFuelLevel.toFixed(1)}, current=${data.fuel_liters.toFixed(1)}, drop=${drop.toFixed(1)}`);
+
+                if (drop >= 2.0 && drop < 100.0) {
+                    showNotification('VOL DE GASOIL !', `Baisse rapide de ${drop.toFixed(1)}L détectée !`, 'danger');
+                } else if (drop >= 100.0) {
+                    console.warn("Fuel glitch detected - ignored theft alert", drop);
+                }
+
+                if (drop > 0.05 && drop < 2.0) {
+                    totalFuelConsumed += drop;
+                }
+            }
+            lastFuelLevel = data.fuel_liters;
+
+            // Temperature (left gauge)
+            if (data.temp < 0) {
+                document.getElementById('tempValue').textContent = 'ERR';
+                updateGauge('tempArc', 0, 120);
+                showNotification('🚨 PROBLÈME CAPTEUR', 'Capteur de température déconnecté ou en court-circuit!', 'danger');
+            } else {
+                document.getElementById('tempValue').textContent = data.temp.toFixed(1);
+                updateGauge('tempArc', data.temp, 120); // max 120°C
+
+                // Alert haute température
+                if (data.temp > 95 && data.engine_on) {
+                    showNotification('Température élevée!', `${Math.round(data.temp)}°C - Arrêtez le moteur`, 'danger');
+                }
+            }
+
+            // Engine Hours (right gauge)
+            let hours = data.engine_hours || 0;
+
+            // Correction automatique: si la valeur est > 5000, elle est probablement en secondes
+            if (hours > 5000) {
+                hours = hours / 3600;
+            }
+
+            document.getElementById('hoursValue').textContent = hours.toFixed(2).replace('.', ',');
+            updateGauge('hoursArc', hours, 10000); // max 10000 heures
+
+            // Tachometer (RPM disabled in ESP32, so keep at 0)
+            updateTachometer(data.rpm || 0);
+            document.getElementById('rpmDisplay').textContent = ((data.rpm || 0) / 1000).toFixed(1);
+
+            // Speed from GPS
+            document.getElementById('speedValue').textContent = Math.round(data.speed || 0);
+
+            // Fuel Percentage
+            const fuelDisplay = document.getElementById('fuelDisplay');
+            const fuelPercent = data.fuel_percent;
+
+            if (fuelPercent <= 0) {
+                fuelDisplay.textContent = 'VIDE';
+                fuelDisplay.style.color = '#ff3b30'; // Red
+            } else {
+                fuelDisplay.textContent = Math.round(data.fuel_percent) + '%';
+                fuelDisplay.style.color = 'var(--text-primary)';
+            }
+
+            // Alert carburant faible
+            if (data.fuel_percent < 15 && data.fuel_percent > 0) {
+                showNotification('Carburant faible', `${Math.round(data.fuel_percent)}% restant`, 'warning');
+            }
+
+            // Engine Status
+            const engineStatusText = document.getElementById('engineStatusText');
+            const engineStatusIcon = document.getElementById('engineStatusIcon');
+            if (data.engine_on) {
+                engineStatusText.textContent = 'MARCHE';
+                engineStatusText.style.color = 'var(--accent-success)';
+                engineStatusIcon.style.stroke = 'var(--accent-success)';
+            } else {
+                engineStatusText.textContent = 'ARRÊT';
+                engineStatusText.style.color = 'var(--text-secondary)';
+                engineStatusIcon.style.stroke = 'var(--text-secondary)';
+            }
+
+            // Gear Display (NEW)
+            const gearDisplay = document.getElementById('gearDisplay');
+            const debugGear = document.getElementById('debugGear');
+
+            if (debugGear) debugGear.textContent = `(${data.gear})`;
+
+            if (data.gear == 1) {
+                gearDisplay.firstChild.textContent = 'AV ';
+                gearDisplay.style.color = 'var(--accent-success)';
+            } else if (data.gear == -1) {
+                gearDisplay.firstChild.textContent = 'AR ';
+                gearDisplay.style.color = '#ffa500';
+            } else {
+                gearDisplay.firstChild.textContent = 'N ';
+                gearDisplay.style.color = 'var(--text-secondary)';
+            }
+
+            // Pression d'huile Digitale (NEW)
+            const oilPressureDisplay = document.getElementById('oilPressureDisplay');
+            if (data.oil_pressure < 0) {
+                oilPressureDisplay.textContent = 'ERR'; // Sensor disconnected
+                oilPressureDisplay.style.color = '#ff3b30';
+            } else {
+                oilPressureDisplay.textContent = data.oil_pressure.toFixed(1) + ' Bar';
+                if (data.engine_on && data.oil_pressure < 0.5) {
+                    oilPressureDisplay.style.color = '#ff3b30'; // Red warning
+                    oilPressureDisplay.classList.add('blink'); // Make digital value blink too
+                    showNotification('Pression huile faible!', `${data.oil_pressure.toFixed(1)} bar - Arrêtez immédiatement`, 'danger');
+                } else {
+                    oilPressureDisplay.style.color = 'var(--text-primary)';
+                    oilPressureDisplay.classList.remove('blink');
+                }
+            }
+
+            // Calcul du kilométrage (Odometer) basé sur le GPS
+            if (data.lat !== 0 && data.lon !== 0) {
+                if (lastLat !== null && lastLon !== null) {
+                    const dist = calculateDistance(lastLat, lastLon, data.lat, data.lon);
+                    // On n'ajoute que si la distance est significative (> 5m) pour éviter le bruit GPS à l'arrêt
+                    // et si la vitesse est cohérente (> 1km/h)
+                    if (dist > 0.005 && (data.speed || 0) > 1) {
+                        odometer += dist;
+                        localStorage.setItem('odometer', odometer);
+                    }
+                }
+                lastLat = data.lat;
+                lastLon = data.lon;
+            }
+
+            // Mise à jour de l'affichage Kilométrage
+            const odometerDisplay = document.getElementById('odometerDisplay');
+            if (odometerDisplay) {
+                odometerDisplay.textContent = odometer.toFixed(1).replace('.', ',') + ' km';
+            }
+
+            // Update Map & GPS Info
+            updateMap(data.lat, data.lon, data.sats);
+
+            // Update warnings
+            updateWarnings(data);
+        }
+
+        // Format duration as decimal hours (e.g. 0.01)
+        function formatDuration(totalSeconds) {
+            return (totalSeconds / 3600).toFixed(2);
+        }
+
+        // Format time as HH:MM
+        function formatTime(date) {
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            return `${hours}:${minutes}`;
+        }
+
+        // Notification system
+        let notificationHistory = [];
+        let lastNotificationTime = {};
+        const NOTIFICATION_COOLDOWN = 60000; // 1 minute cooldown per notification type
+
+        function showNotification(title, message, type = 'info') {
+            // Prevent spam - only show same notification type once per minute
+            // EXCEPT for 'danger' types (alerts) where we want more frequent updates
+            const now = Date.now();
+            const cooldown = (type === 'danger') ? 5000 : NOTIFICATION_COOLDOWN; // 5s for alerts, 60s for others
+
+            if (lastNotificationTime[title] && (now - lastNotificationTime[title] < cooldown)) {
+                return;
+            }
+            lastNotificationTime[title] = now;
+
+            // Add to history
+            const notification = {
+                title,
+                message,
+                type,
+                timestamp: new Date().toLocaleTimeString('fr-FR')
+            };
+            notificationHistory.unshift(notification);
+            if (notificationHistory.length > 10) notificationHistory.pop();
+
+            // Create Visual Toast
+            const container = document.getElementById('notificationContainer');
+            const toast = document.createElement('div');
+            toast.className = `notification-toast ${type}`;
+
+            // Icon selection
+            let icon = 'ℹ️';
+            if (type === 'warning') icon = '⚠️';
+            else if (type === 'danger') icon = '🚨';
+            else if (type === 'success') icon = '✅';
+
+            toast.innerHTML = `
+                <div style="font-size: 1.5rem;">${icon}</div>
+                <div>
+                    <div style="font-weight: bold; margin-bottom: 2px; font-family: 'Orbitron', sans-serif;">${title}</div>
+                    <div style="font-size: 0.9rem; color: var(--text-secondary);">${message}</div>
+                </div>
+            `;
+
+            container.appendChild(toast);
+
+            // Update History UI if modal is open
+            renderHistory();
+
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                toast.style.animation = 'fadeOut 0.5s ease-in forwards';
+                toast.addEventListener('animationend', () => {
+                    if (toast.parentNode) {
+                        toast.remove();
+                    }
+                });
+            }, 5000);
+
+            // Log to console
+            console.log(`[${type.toUpperCase()}] ${title}: ${message}`);
+        }
+
+        function toggleHistory() {
+            const modal = document.getElementById('historyModal');
+            modal.classList.toggle('active');
+            if (modal.classList.contains('active')) {
+                renderHistory();
+            }
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('historyList');
+            if (!list) return;
+
+            if (notificationHistory.length === 0) {
+                list.innerHTML = '<div style="text-align:center; color:var(--text-secondary); margin-top:20px;">Aucune notification</div>';
+                return;
+            }
+
+            list.innerHTML = notificationHistory.map(n => `
+                <div class="history-item ${n.type}">
+                    <div class="history-item-time">${n.timestamp}</div>
+                    <div class="history-item-title">${n.title}</div>
+                    <div class="history-item-msg">${n.message}</div>
+                </div>
+            `).join('');
+        }
+
+
+        // Data Logging for Export
+        let telemetryHistory = [];
+        const MAX_HISTORY_POINTS = 10000; // Store last 10000 points (~1-2 hours)
+
+        // Fetch telemetry data
+        async function fetchTelemetry() {
+            try {
+                const url = dataSource === 'adafruit' ? BACKEND_URL : `http://${ESP32_IP}/telemetry`;
+                const response = await fetch(url);
+                if (response.ok) {
+                    const data = await response.json();
+
+                    // Update dashboard first using current telemetryData as "previous" state
+                    updateDashboard(data);
+
+                    // Now update the global telemetryData for the next cycle
+                    telemetryData = data;
+
+                    // Log data
+                    if (telemetryHistory.length > MAX_HISTORY_POINTS) telemetryHistory.shift();
+                    telemetryHistory.push({
+                        time: new Date().toLocaleTimeString(),
+                        timestamp: Date.now(),
+                        rpm: data.rpm || 0,
+                        speed: data.speed || 0,
+                        temp: data.temp || 0,
+                        oil: data.oil_pressure || 0,
+                        fuel: data.fuel_liters || 0,
+                        gear: data.gear || 0
+                    });
+
+                    updateCharts(data); // Update charts with new data
+                }
+            } catch (error) {
+                console.error('Erreur de connexion ESP32:', error);
+                // Demo mode if needed
+            }
+        }
+
+        // Export History to CSV
+        function exportHistory() {
+            if (telemetryHistory.length === 0) {
+                showNotification('Export Impossible', 'Aucune donnée enregistrée', 'warning');
+                return;
+            }
+
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Time,Timestamp,RPM,Speed (km/h),Temp (C),Oil (Bar),Fuel (L),Gear\n";
+
+            telemetryHistory.forEach(point => {
+                const row = `${point.time},${point.timestamp},${point.rpm},${point.speed},${point.temp},${point.oil.toFixed(2)},${point.fuel.toFixed(2)},${point.gear}`;
+                csvContent += row + "\n";
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `telemetry_export_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            showNotification('Export Réussi', `${telemetryHistory.length} points de données téléchargés`, 'success');
+        }
+
+        // Reset Engine Hours
+        async function resetEngineHours() {
+            if (!confirm('Êtes-vous sûr de vouloir réinitialiser les heures moteur à zéro?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('http://192.168.4.1/api/reset-hours', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showNotification('Réinitialisation Réussie', 'Les heures moteur ont été réinitialisées à zéro', 'success');
+                    // Immediately update the display
+                    document.getElementById('hoursValue').textContent = '0,00';
+                    updateHoursGauge(0);
+                } else {
+                    showNotification('Erreur', 'Impossible de réinitialiser les heures moteur', 'error');
+                }
+            } catch (error) {
+                console.error('Reset error:', error);
+                showNotification('Erreur', 'Erreur de connexion avec l\'ESP32', 'error');
+            }
+        }
+
+        // Initialize dashboard with zeros
+        function initializeDashboard() {
+            updateDashboard(telemetryData);
+        }
+
+        // ============= CHARTS INITIALIZATION =============
+        let tempChartInstance, oilChartInstance, fuelChartInstance;
+        const MAX_CHART_POINTS = 50; // Keep last 50 data points
+        const chartData = {
+            labels: [],
+            temp: [],
+            oil: [],
+            fuel: []
+        };
+
+        // Chart configuration
+        const chartConfig = {
+            type: 'line',
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            color: '#86868b',
+                            maxTicksLimit: 8
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.05)'
+                        }
+                    },
+                    y: {
+                        ticks: {
+                            color: '#86868b'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.05)'
+                        }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                }
+            }
+        };
+
+        // Initialize Temperature Chart
+        function initTempChart() {
+            const ctx = document.getElementById('tempChart').getContext('2d');
+            tempChartInstance = new Chart(ctx, {
+                ...chartConfig,
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{
+                        label: 'Température (°C)',
+                        data: chartData.temp,
+                        borderColor: '#ff3b30',
+                        backgroundColor: 'rgba(255, 59, 48, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    ...chartConfig.options,
+                    scales: {
+                        ...chartConfig.options.scales,
+                        y: {
+                            ...chartConfig.options.scales.y,
+                            min: 0,
+                            max: 120,
+                            ticks: {
+                                ...chartConfig.options.scales.y.ticks,
+                                callback: function (value) {
+                                    return value + '°C';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Oil Pressure Chart
+        function initOilChart() {
+            const ctx = document.getElementById('oilChart').getContext('2d');
+            oilChartInstance = new Chart(ctx, {
+                ...chartConfig,
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{
+                        label: 'Pression (Bar)',
+                        data: chartData.oil,
+                        borderColor: '#ffa500',
+                        backgroundColor: 'rgba(255, 165, 0, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    ...chartConfig.options,
+                    scales: {
+                        ...chartConfig.options.scales,
+                        y: {
+                            ...chartConfig.options.scales.y,
+                            min: 0,
+                            max: 5,
+                            ticks: {
+                                ...chartConfig.options.scales.y.ticks,
+                                callback: function (value) {
+                                    return value + ' Bar';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Fuel Chart
+        function initFuelChart() {
+            const ctx = document.getElementById('fuelChart').getContext('2d');
+            fuelChartInstance = new Chart(ctx, {
+                ...chartConfig,
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{
+                        label: 'Carburant (%)',
+                        data: chartData.fuel,
+                        borderColor: '#00d4ff',
+                        backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    ...chartConfig.options,
+                    scales: {
+                        ...chartConfig.options.scales,
+                        y: {
+                            ...chartConfig.options.scales.y,
+                            min: 0,
+                            max: 100,
+                            ticks: {
+                                ...chartConfig.options.scales.y.ticks,
+                                callback: function (value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update charts with new data
+        function updateCharts(data) {
+            const now = new Date();
+            const timeLabel = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            // Add new data point
+            chartData.labels.push(timeLabel);
+            chartData.temp.push(data.temp || 0);
+            chartData.oil.push(data.oil_pressure || 0);
+            chartData.fuel.push(data.fuel_percent || 0);
+
+            // Keep only last MAX_CHART_POINTS
+            if (chartData.labels.length > MAX_CHART_POINTS) {
+                chartData.labels.shift();
+                chartData.temp.shift();
+                chartData.oil.shift();
+                chartData.fuel.shift();
+            }
+
+            // Update charts
+            if (tempChartInstance) tempChartInstance.update('none');
+            if (oilChartInstance) oilChartInstance.update('none');
+            if (fuelChartInstance) fuelChartInstance.update('none');
+        }
+
+        // Initialize dashboard components immediately (non-DOM dependent)
+        initTachoMarks();
+        initializeDashboard();
+
+        // Initialize charts after DOM is loaded
+        document.addEventListener('DOMContentLoaded', function () {
+            if (typeof Chart !== 'undefined') {
+                initTempChart();
+                initOilChart();
+                initFuelChart();
+            } else {
+                console.warn('[OFFLINE] Chart.js non chargé - Graphiques désactivés');
+                // Optional: Show "Offline Mode" notice in chart area
+                document.querySelectorAll('.chart-card').forEach(card => {
+                    card.innerHTML += '<div style="color:var(--text-secondary); font-size:0.8rem; margin-top:20px;">Mode hors-ligne : Graphiques indisponibles</div>';
+                });
+            }
+        });
+
+        // Reset engine hours via API
+        async function resetEngineHours() {
+            if (!confirm("Voulez-vous vraiment réinitialiser les heures moteur à zéro ?")) return;
+
+            try {
+                const response = await fetch(`http://${ESP32_IP}/api/reset_hours`, {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    showNotification('Heures Reset', 'Les heures moteur ont été réinitialisées', 'success');
+                    // Reset local session data
+                    totalFuelConsumed = 0;
+                    lastFuelLevel = 0;
+                    document.getElementById('fuelConsumptionDisplay').textContent = '0.0 L';
+                } else {
+                    showNotification('Erreur Reset', 'Impossible de réinitialiser les heures', 'danger');
+                }
+            } catch (error) {
+                console.error('Erreur reset:', error);
+                showNotification('Erreur Connexion', 'ESP32 injoignable pour le reset', 'danger');
+            }
+        }
+
+        // Start fetching data
+        setInterval(fetchTelemetry, FETCH_INTERVAL);
+
+        // ============= COLOR CUSTOMIZATION SYSTEM =============
+
+        // Toggle settings panel
+        function toggleSettingsPanel(tab) {
+            const panel = document.getElementById('colorPanel');
+            const toggleTheme = document.getElementById('colorPanelToggle');
+            const toggleCalib = document.getElementById('calibPanelToggle');
+
+            // Explicit close (passed null or called from X button)
+            if (!tab) {
+                panel.style.display = 'none';
+                toggleTheme.style.visibility = 'visible';
+                toggleCalib.style.visibility = 'visible';
+                return;
+            }
+
+            // Check if panel is visible
+            const isOpen = panel.style.display !== 'none';
+
+            // Determine currently active section
+            const isThemeActive = document.getElementById('sectionTheme').style.display === 'block';
+            const currentTab = isThemeActive ? 'theme' : 'calib';
+
+            if (isOpen && currentTab === tab) {
+                // Close if clicking the already active tab
+                panel.style.display = 'none';
+                toggleTheme.style.visibility = 'visible';
+                toggleCalib.style.visibility = 'visible';
+            } else {
+                // Open and/or switch
+                panel.style.display = 'block';
+
+                // Dynamic Positioning
+                if (tab === 'calib') {
+                    panel.style.left = '40px';
+                    panel.style.right = 'auto';
+                } else {
+                    // Default / Theme -> Right
+                    panel.style.left = 'auto';
+                    panel.style.right = '40px';
+                }
+
+                // Hide external toggles to avoid clutter/confusion
+                toggleTheme.style.visibility = 'hidden';
+                toggleCalib.style.visibility = 'hidden';
+                switchSettingsTab(tab);
+            }
+        }
+
+        function switchSettingsTab(tab) {
+            const tabTheme = document.getElementById('tabMainTheme');
+            const tabCalib = document.getElementById('tabMainCalib');
+            const tabSource = document.getElementById('tabMainSource');
+            const secTheme = document.getElementById('sectionTheme');
+            const secCalib = document.getElementById('sectionCalib');
+            const secSource = document.getElementById('sectionSource');
+
+            if (tabTheme) tabTheme.classList.remove('active');
+            if (tabCalib) tabCalib.classList.remove('active');
+            if (tabSource) tabSource.classList.remove('active');
+            if (secTheme) secTheme.style.display = 'none';
+            if (secCalib) secCalib.style.display = 'none';
+            if (secSource) secSource.style.display = 'none';
+
+            if (tab === 'calib') {
+                if (tabCalib) tabCalib.classList.add('active');
+                if (secCalib) secCalib.style.display = 'block';
+                document.getElementById('colorPanel').style.borderColor = 'var(--accent-blue)';
+            } else if (tab === 'source') {
+                if (tabSource) tabSource.classList.add('active');
+                if (secSource) secSource.style.display = 'block';
+                document.getElementById('colorPanel').style.borderColor = 'var(--accent-success)';
+
+                // Set radio buttons
+                if (dataSource === 'adafruit') document.getElementById('radioAdafruit').checked = true;
+                else document.getElementById('radioEsp32').checked = true;
+            } else {
+                if (tabTheme) tabTheme.classList.add('active');
+                if (secTheme) secTheme.style.display = 'block';
+                document.getElementById('colorPanel').style.borderColor = 'var(--accent-gti)';
+            }
+        }
+
+        function setDataSource(source) {
+            dataSource = source;
+            localStorage.setItem('dataSource', source);
+            console.log("Source changée vers:", source);
+            showNotification('Source Données', `Lecture via ${source.toUpperCase()}`, 'info');
+        }
+
+        // Theme presets
+        const themes = {
+            gti: {
+                accent: '#ff3b30',
+                accentBlue: '#007AFF',
+                accentSuccess: '#34C759',
+                bg: '#0a0a0a',
+                name: 'GTI Rouge'
+            },
+            blue: {
+                accent: '#007AFF',
+                accentBlue: '#5AC8FA',
+                accentSuccess: '#30D158',
+                bg: '#0a0a14',
+                name: 'Bleu'
+            },
+            green: {
+                accent: '#34C759',
+                accentBlue: '#30D158',
+                accentSuccess: '#32D74B',
+                bg: '#0a140a',
+                name: 'Vert'
+            },
+            orange: {
+                accent: '#ff9500',
+                accentBlue: '#ffb340',
+                accentSuccess: '#34C759',
+                bg: '#14100a',
+                name: 'Orange'
+            }
+        };
+
+        // Set theme
+        function setTheme(themeName) {
+            const theme = themes[themeName];
+            if (!theme) return;
+
+            // Update CSS variables
+            document.documentElement.style.setProperty('--accent-gti', theme.accent);
+            document.documentElement.style.setProperty('--accent-blue', theme.accentBlue);
+            document.documentElement.style.setProperty('--accent-success', theme.accentSuccess);
+            document.documentElement.style.setProperty('--bg-main', theme.bg);
+
+            // Update color pickers
+            document.getElementById('accentColorPicker').value = theme.accent;
+            document.getElementById('bgColorPicker').value = theme.bg;
+
+            // Update active button
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Save to localStorage
+            localStorage.setItem('dashboardTheme', themeName);
+
+            console.log(`Thème changé: ${theme.name}`);
+        }
+
+        // Update custom color
+        function updateCustomColor(type, color) {
+            if (type === 'accent') {
+                document.documentElement.style.setProperty('--accent-gti', color);
+                localStorage.setItem('customAccentColor', color);
+            } else if (type === 'bg') {
+                document.documentElement.style.setProperty('--bg-main', color);
+                localStorage.setItem('customBgColor', color);
+            }
+
+            // Remove active state from all theme buttons when using custom colors
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            console.log(`Couleur ${type} changée: ${color}`);
+        }
+
+        // Load saved theme on startup
+        function loadSavedTheme() {
+            const savedTheme = localStorage.getItem('dashboardTheme');
+            const customAccent = localStorage.getItem('customAccentColor');
+            const customBg = localStorage.getItem('customBgColor');
+
+            if (savedTheme && themes[savedTheme]) {
+                // Apply saved theme preset
+                const theme = themes[savedTheme];
+                document.documentElement.style.setProperty('--accent-gti', theme.accent);
+                document.documentElement.style.setProperty('--accent-blue', theme.accentBlue);
+                document.documentElement.style.setProperty('--accent-success', theme.accentSuccess);
+                document.documentElement.style.setProperty('--bg-main', theme.bg);
+
+                // Update pickers (if they exist)
+                const accentPicker = document.getElementById('accentColorPicker');
+                const bgPicker = document.getElementById('bgColorPicker');
+                if (accentPicker) accentPicker.value = theme.accent;
+                if (bgPicker) bgPicker.value = theme.bg;
+            } else if (customAccent || customBg) {
+                // Apply custom colors
+                if (customAccent) {
+                    document.documentElement.style.setProperty('--accent-gti', customAccent);
+                    const accentPicker = document.getElementById('accentColorPicker');
+                    if (accentPicker) accentPicker.value = customAccent;
+                }
+                if (customBg) {
+                    document.documentElement.style.setProperty('--bg-main', customBg);
+                    const bgPicker = document.getElementById('bgColorPicker');
+                    if (bgPicker) bgPicker.value = customBg;
+                }
+            }
+        }
+
+        // Initialize theme on load
+        loadSavedTheme();
+        loadCalibration();
+
+        // Sensor Calibration Logic
+        function switchCalibTab(sensor) {
+            document.querySelectorAll('.calib-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.calibration-group').forEach(g => g.style.display = 'none');
+
+            if (sensor === 'fuel') {
+                document.getElementById('tabFuel').classList.add('active');
+                document.getElementById('groupFuel').style.display = 'block';
+            } else {
+                document.getElementById('tabTemp').classList.add('active');
+                document.getElementById('groupTemp').style.display = 'block';
+            }
+        }
+
+        function saveCalibration() {
+            const config = {
+                fuelTank: parseFloat(document.getElementById('calibFuelTank').value),
+                fuelEmpty: parseFloat(document.getElementById('calibFuelEmpty').value),
+                fuelFull: parseFloat(document.getElementById('calibFuelFull').value),
+                tempBeta: parseFloat(document.getElementById('calibTempBeta').value),
+                tempR0: parseFloat(document.getElementById('calibTempR0').value),
+                tempOffset: parseFloat(document.getElementById('calibTempOffset').value)
+            };
+            localStorage.setItem('sensorCalibration', JSON.stringify(config));
+            console.log("Calibration sauvegardée:", config);
+        }
+
+        function loadCalibration() {
+            const saved = localStorage.getItem('sensorCalibration');
+            if (saved) {
+                const config = JSON.parse(saved);
+                if (document.getElementById('calibFuelTank')) document.getElementById('calibFuelTank').value = config.fuelTank || 60;
+                if (document.getElementById('calibFuelEmpty')) document.getElementById('calibFuelEmpty').value = config.fuelEmpty || 12;
+                if (document.getElementById('calibFuelFull')) document.getElementById('calibFuelFull').value = config.fuelFull || 166;
+                if (document.getElementById('calibTempBeta')) document.getElementById('calibTempBeta').value = config.tempBeta || 3950;
+                if (document.getElementById('calibTempR0')) document.getElementById('calibTempR0').value = config.tempR0 || 3025;
+                if (document.getElementById('calibTempOffset')) document.getElementById('calibTempOffset').value = config.tempOffset || 0;
+            }
+        }
+
+        function setCurrentAs(target) {
+            if (!telemetryData) return;
+            const rFuel = telemetryData.fuel_res || 0;
+            const rTemp = telemetryData.temp_res || 0;
+
+            if (target === 'fuelEmpty') {
+                document.getElementById('calibFuelEmpty').value = Math.round(rFuel);
+            } else if (target === 'fuelFull') {
+                document.getElementById('calibFuelFull').value = Math.round(rFuel);
+            } else if (target === 'tempR0') {
+                document.getElementById('calibTempR0').value = Math.round(rTemp);
+            }
+            saveCalibration();
+            showNotification('Calibration', `Point ${target} capturé`, 'success');
+        }
+
+        function applyCalibration(data) {
+            const config = JSON.parse(localStorage.getItem('sensorCalibration') || '{}');
+
+            // Raw values from ESP32
+            const rFuel = data.fuel_res || 0;
+            const rTemp = data.temp_res || 0;
+
+            // Update raw UI feedback if panel is open
+            const fuelResSpan = document.getElementById('rawFuelRes');
+            const tempResSpan = document.getElementById('rawTempRes');
+            if (fuelResSpan) fuelResSpan.textContent = Math.round(rFuel);
+            if (tempResSpan) tempResSpan.textContent = Math.round(rTemp);
+
+            // 1. CALIBRATE FUEL (Matching BSP.h logic: linear interp between R_Empty and R_Full)
+            if (config.fuelEmpty !== undefined && config.fuelFull !== undefined && config.fuelEmpty !== config.fuelFull) {
+                // percent = (R - R_Empty) / (R_Full - R_Empty) * 100
+                let percent = (rFuel - config.fuelEmpty) / (config.fuelFull - config.fuelEmpty) * 100;
+                percent = Math.max(0, Math.min(100, percent));
+
+                data.fuel_percent = percent;
+                data.fuel_liters = (percent / 100) * (config.fuelTank || 60);
+            }
+
+            // 2. CALIBRATE TEMP (Using Steinhart-Hart equation like the ESP32)
+            if (config.tempBeta && config.tempR0 && rTemp > 0) {
+                const beta = config.tempBeta;
+                const r0 = config.tempR0;
+                const t0K = 298.15; // 25°C in Kelvin
+
+                // 1/T = (1/Beta) * ln(R/R0) + (1/T0)
+                const invT = (1.0 / beta) * Math.log(rTemp / r0) + (1.0 / t0K);
+                let tempC = (1.0 / invT) - 273.15;
+
+                if (config.tempOffset) {
+                    tempC += parseFloat(config.tempOffset);
+                }
+                data.temp = tempC;
+            } else if (config.tempOffset !== undefined && !config.tempBeta) {
+                // If only simple offset is provided
+                data.temp += parseFloat(config.tempOffset);
+            }
+        }
+
+        // Calibration / Reset Function
+        function calibrateSensors() {
+            if (confirm("Voulez-vous réinitialiser l'affichage et l'historique des capteurs ?")) {
+                // Clear local history
+                telemetryHistory = [];
+                notificationHistory = [];
+                lastNotificationTime = {};
+
+                // Clear notifications visually
+                const container = document.getElementById('notificationContainer');
+                if (container) container.innerHTML = '';
+
+                // Visual Feedback
+                showNotification('Maintenance', 'Calibration effectuée. Historique effacé.', 'success');
+
+                // Optional: Reload page to fully reset state if needed
+                // location.reload(); 
+            }
+        }
+
+        // ============= 3D MODEL VIEWER =============
+
+        let scene, camera, renderer, forkliftModel, controls;
+        let modelRotationSpeed = 0;
+
+        function init3DViewer() {
+            if (typeof THREE === 'undefined') {
+                console.warn('[OFFLINE] Three.js non chargé - Visualisation 3D désactivée');
+                return;
+            }
+            const canvas = document.getElementById('modelCanvas');
+            if (!canvas) return;
+            const container = canvas.parentElement;
+
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = null; // Transparent background
+
+            // Camera
+            const aspect = container.clientWidth / container.clientHeight;
+            camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
+            camera.position.set(5, 3, 5);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({
+                canvas: canvas,
+                alpha: true,
+                antialias: true
+            });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight1.position.set(5, 10, 5);
+            scene.add(directionalLight1);
+
+            const directionalLight2 = new THREE.DirectionalLight(0x4a90e2, 0.3);
+            directionalLight2.position.set(-5, 5, -5);
+            scene.add(directionalLight2);
+
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.enableZoom = true;
+            controls.autoRotate = false;
+            controls.maxPolarAngle = Math.PI / 2;
+
+            // Load OBJ model
+            console.log('[3D] Tentative de chargement du modèle Forklift.obj...');
+
+            // Check if OBJLoader exists
+            if (typeof THREE.OBJLoader === 'undefined') {
+                console.error('[3D] OBJLoader non disponible! Vérifiez que le script est chargé.');
+                createFallbackModel();
+                return;
+            }
+
+            const loader = new THREE.OBJLoader();
+
+            // Add timeout for loading
+            let loadTimeout = setTimeout(() => {
+                console.warn('[3D] Timeout de chargement - Utilisation du modèle de secours');
+                createFallbackModel();
+            }, 5000);
+
+            loader.load(
+                'Forklift.obj',
+                function (object) {
+                    clearTimeout(loadTimeout);
+                    console.log('[3D] Modèle OBJ chargé avec succès!');
+
+                    // Center and scale the model
+                    const box = new THREE.Box3().setFromObject(object);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+
+                    // Center the model
+                    object.position.x = -center.x;
+                    object.position.y = -center.y;
+                    object.position.z = -center.z;
+
+                    // Scale to fit
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const scale = 2.5 / maxDim;
+                    object.scale.setScalar(scale);
+
+                    // Apply color based on theme
+                    object.traverse(function (child) {
+                        if (child instanceof THREE.Mesh) {
+                            child.material = new THREE.MeshPhongMaterial({
+                                color: 0xffa500, // Orange color for forklift
+                                shininess: 30,
+                                specular: 0x333333
+                            });
+                        }
+                    });
+
+                    forkliftModel = object;
+                    scene.add(object);
+                    console.log('[3D] Modèle de chariot ajouté à la scène');
+                },
+                function (xhr) {
+                    const percent = (xhr.loaded / xhr.total * 100);
+                    if (xhr.loaded > 0) {
+                        console.log(`[3D] Chargement: ${percent.toFixed(1)}%`);
+                    }
+                },
+                function (error) {
+                    clearTimeout(loadTimeout);
+                    console.error('[3D] Erreur de chargement du modèle:', error);
+                    console.warn('[3D] Création d\'un modèle de secours...');
+                    createFallbackModel();
+                }
+            );
+        }
+
+        // Create a simple fallback forklift model
+        function createFallbackModel() {
+            console.log('[3D] Création d\'un chariot simplifié...');
+
+            const group = new THREE.Group();
+
+            // Main body (orange)
+            const bodyGeometry = new THREE.BoxGeometry(1, 0.6, 1.5);
+            const bodyMaterial = new THREE.MeshPhongMaterial({
+                color: 0xffa500,
+                shininess: 30
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.position.y = 0.3;
+            group.add(body);
+
+            // Cabin (dark)
+            const cabinGeometry = new THREE.BoxGeometry(0.8, 0.5, 0.7);
+            const cabinMaterial = new THREE.MeshPhongMaterial({
+                color: 0x333333,
+                transparent: true,
+                opacity: 0.7
+            });
+            const cabin = new THREE.Mesh(cabinGeometry, cabinMaterial);
+            cabin.position.set(0, 0.8, -0.2);
+            group.add(cabin);
+
+            // Forks (gray)
+            const forkMaterial = new THREE.MeshPhongMaterial({ color: 0x888888 });
+            const fork1Geometry = new THREE.BoxGeometry(0.1, 0.05, 1.2);
+            const fork1 = new THREE.Mesh(fork1Geometry, forkMaterial);
+            fork1.position.set(-0.25, 0.1, 1);
+            group.add(fork1);
+
+            const fork2 = new THREE.Mesh(fork1Geometry, forkMaterial);
+            fork2.position.set(0.25, 0.1, 1);
+            group.add(fork2);
+
+            // Wheels (black)
+            const wheelMaterial = new THREE.MeshPhongMaterial({ color: 0x222222 });
+            const wheelGeometry = new THREE.CylinderGeometry(0.15, 0.15, 0.1, 16);
+
+            const wheels = [
+                { x: -0.4, z: 0.6 },
+                { x: 0.4, z: 0.6 },
+                { x: -0.4, z: -0.6 },
+                { x: 0.4, z: -0.6 }
+            ];
+
+            wheels.forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                wheel.position.set(pos.x, 0.15, pos.z);
+                wheel.rotation.z = Math.PI / 2;
+                group.add(wheel);
+            });
+
+            // Scale and position
+            group.scale.setScalar(1.5);
+
+            forkliftModel = group;
+            scene.add(group);
+            console.log('[3D] Modèle de chariot simplifié créé');
+        }
+
+        // Load/Create forklift model
+        function loadForkliftModel() {
+            // For now, we use the simple forklift model
+            // In the future, you could load an external OBJ/GLB file here
+            createFallbackModel();
+        }
+
+        // Initialize 3D viewer
+        function init3DViewer() {
+            const canvas = document.getElementById('modelCanvas');
+            if (!canvas) {
+                console.error('[3D] Canvas non trouvé!');
+                return;
+            }
+
+            const container = canvas.parentElement;
+
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = null; // Transparent background
+
+            // Camera
+            const aspect = container.clientWidth / container.clientHeight;
+            camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
+            camera.position.set(5, 3, 5);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({
+                canvas: canvas,
+                alpha: true,
+                antialias: true
+            });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight1.position.set(5, 10, 5);
+            scene.add(directionalLight1);
+
+            const directionalLight2 = new THREE.DirectionalLight(0x4a90e2, 0.3);
+            directionalLight2.position.set(-5, 5, -5);
+            scene.add(directionalLight2);
+
+            // Controls
+            if (typeof THREE.OrbitControls !== 'undefined') {
+                controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.05;
+                controls.enableZoom = true;
+                controls.autoRotate = false;
+                controls.maxPolarAngle = Math.PI / 2;
+            } else {
+                console.warn('[3D] OrbitControls non disponible');
+            }
+
+            // Try to load OBJ model
+            if (typeof THREE.OBJLoader !== 'undefined') {
+                loadForkliftModel();
+            } else {
+                createFallbackModel();
+            }
+
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+
+                // Rotate model based on telemetry
+                if (forkliftModel) {
+                    // Auto-rotate slowly when engine is on
+                    if (telemetryData.engine_on) {
+                        modelRotationSpeed = 0.002;
+                    } else {
+                        modelRotationSpeed *= 0.95; // Slowdown when engine off
+                    }
+
+                    forkliftModel.rotation.y += modelRotationSpeed;
+
+                    // Tilt slightly based on gear
+                    if (telemetryData.gear === 1) {
+                        // Forward - tilt forward slightly
+                        forkliftModel.rotation.x = THREE.MathUtils.lerp(forkliftModel.rotation.x, -0.05, 0.05);
+                    } else if (telemetryData.gear === -1) {
+                        // Reverse - tilt back slightly
+                        forkliftModel.rotation.x = THREE.MathUtils.lerp(forkliftModel.rotation.x, 0.05, 0.05);
+                    } else {
+                        // Neutral - level
+                        forkliftModel.rotation.x = THREE.MathUtils.lerp(forkliftModel.rotation.x, 0, 0.05);
+                    }
+                }
+
+                controls.update();
+                renderer.render(scene, camera);
+            }
+
+            animate();
+
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            const container = document.querySelector('.model-viewer');
+            if (!container) return;
+
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // Initialize 3D viewer after page load
+        window.addEventListener('load', function () {
+            if (typeof THREE !== 'undefined') init3DViewer();
+            if (typeof L !== 'undefined') initMap();
+        });
+
+        // ============= MAP SYSTEM =============
+        let map, truckMarker;
+
+        function initMap() {
+            if (typeof L === 'undefined') {
+                console.warn('[OFFLINE] Leaflet non chargé - Carte désactivée');
+                const mapDiv = document.getElementById('map');
+                if (mapDiv) mapDiv.innerHTML = '<div style="display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-secondary); background:var(--bg-glass); font-family:Orbitron;">CARTE INDISPONIBLE (HORS-LIGNE)</div>';
+                return;
+            }
+            console.log('[MAP] Initialisation de la carte...');
+            // Default view (e.g. Tunisia/North Africa or user's last known)
+            map = L.map('map', {
+                zoomControl: false,
+                attributionControl: false
+            }).setView([36.8065, 10.1815], 13);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19
+            }).addTo(map);
+
+            const truckIcon = L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div style="background-color: var(--accent-gti); width: 15px; height: 15px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px var(--accent-gti);"></div>`,
+                iconSize: [15, 15],
+                iconAnchor: [7, 7]
+            });
+
+            truckMarker = L.marker([36.8065, 10.1815], { icon: truckIcon }).addTo(map);
+            truckMarker.bindPopup("Position du chariot").openPopup();
+        }
+
+        function updateMap(lat, lon, sats = 0) {
+            const gpsStatus = document.getElementById('gpsStatus');
+            const gmapsLink = document.getElementById('gmapsLink');
+            const latDisplay = document.getElementById('latDisplay');
+            const lonDisplay = document.getElementById('lonDisplay');
+            const gpsSats = document.getElementById('gpsSats');
+
+            // Update Satellite Display
+            if (gpsSats) gpsSats.textContent = sats || 0;
+
+            // Type conversion to ensure .toFixed() works
+            const nLat = Number(lat);
+            const nLon = Number(lon);
+
+            // Update textual coordinates ALWAYS (Offline compatible)
+            const hasFix = !isNaN(nLat) && !isNaN(nLon) && (nLat !== 0 || nLon !== 0);
+
+            if (latDisplay) latDisplay.textContent = hasFix ? nLat.toFixed(6) : "--.------";
+            if (lonDisplay) lonDisplay.textContent = hasFix ? nLon.toFixed(6) : "--.------";
+
+            if (!hasFix) {
+                if (gpsStatus) {
+                    gpsStatus.textContent = "SANS FIX";
+                    gpsStatus.style.color = "#ff3b30";
+                }
+                if (gmapsLink) gmapsLink.style.display = 'none';
+                return;
+            }
+
+            if (gpsStatus) {
+                gpsStatus.textContent = "FIX OK";
+                gpsStatus.style.color = "var(--accent-success)";
+            }
+
+            // Update Google Maps link
+            if (gmapsLink) {
+                gmapsLink.href = `https://www.google.com/maps?q=${nLat},${nLon}`;
+                gmapsLink.style.display = 'flex';
+            }
+
+            // Update Visual Leaflet Map ONLY if loaded
+            if (map && truckMarker) {
+                try {
+                    const newPos = [nLat, nLon];
+                    truckMarker.setLatLng(newPos);
+                    map.panTo(newPos);
+                } catch (e) {
+                    console.error('[MAP] Position error:', e);
+                }
+            }
+        }
+    </script>
+
+    <!-- Oil Warning Indicator -->
+    <div class="oil-warning-indicator" id="oilWarningIndicator" style="display: none;">
+        <svg class="reserve-icon" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2">
+            <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
+            <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
+            <path d="M6 1h12l-1 5h-10l-1-5z" />
+        </svg>
+        <div style="display: flex; flex-direction: column;">
+            <span class="reserve-text" style="color: #ff3b30; font-size: 1rem;">PRESSION HUILE</span>
+            <span class="reserve-text" style="color: #ff3b30; font-size: 1.4rem;">BASSE</span>
+        </div>
+    </div>
+
+    <!-- Dashboard Toggles -->
+    <div class="panel-toggle secondary" id="calibPanelToggle" onclick="toggleSettingsPanel('calib')">
+        <span class="toggle-label">Calibration</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path
+                d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+        </svg>
+    </div>
+
+    <div class="panel-toggle" id="colorPanelToggle" onclick="toggleSettingsPanel('theme')">
+        <span class="toggle-label">Thème</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+        </svg>
+    </div>
+
+    <!-- Settings Customization Panel -->
+    <div class="color-panel" id="colorPanel" style="display: none;">
+        <div class="color-panel-header">
+            <span>⚙️ Paramètres</span>
+            <span style="cursor: pointer; margin-left: auto; padding: 5px;" onclick="toggleSettingsPanel(null)">✕</span>
+        </div>
+
+        <div class="settings-tabs">
+            <div class="settings-tab active" id="tabMainTheme" onclick="switchSettingsTab('theme')">🎨 Thème</div>
+            <div class="settings-tab" id="tabMainCalib" onclick="switchSettingsTab('calib')">🔧 Calibration</div>
+            <div class="settings-tab" id="tabMainSource" onclick="switchSettingsTab('source')">🌐 Source</div>
+        </div>
+
+        <!-- Theme Section -->
+        <div id="sectionTheme" style="display: block;">
+            <div class="color-label" style="margin-bottom: 8px;">Ambiance (Golf 8 Style)</div>
+            <div class="theme-presets">
+                <div class="theme-btn active" onclick="setTheme('gti')">GTI Rouge</div>
+                <div class="theme-btn" onclick="setTheme('blue')">R-Line Bleu</div>
+                <div class="theme-btn" onclick="setTheme('green')">Eco Vert</div>
+                <div class="theme-btn" onclick="setTheme('orange')">Lounge Orange</div>
+            </div>
+
+            <div class="color-picker-group">
+                <div class="color-picker-row">
+                    <span class="color-label">Accent</span>
+                    <input type="color" class="color-input" id="accentColorPicker" value="#ff3b30"
+                        onchange="updateCustomColor('accent', this.value)">
+                </div>
+                <div class="color-picker-row">
+                    <span class="color-label">Fond</span>
+                    <input type="color" class="color-input" id="bgColorPicker" value="#000000"
+                        onchange="updateCustomColor('bg', this.value)">
+                </div>
+            </div>
+        </div>
+
+        <!-- Source Section -->
+        <div id="sectionSource" style="display: none; padding: 15px;">
+            <div class="color-label" style="margin-bottom: 12px;">Source des Données</div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <label class="source-option"
+                    style="display: flex; align-items: center; gap: 10px; cursor: pointer; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px;">
+                    <input type="radio" name="dataSource" value="esp32" onchange="setDataSource('esp32')"
+                        id="radioEsp32">
+                    <div>
+                        <div style="font-weight: bold;">ESP32 Direct (Local)</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">Connexion directe via WiFi "Redmi"
+                        </div>
+                    </div>
+                </label>
+                <label class="source-option"
+                    style="display: flex; align-items: center; gap: 10px; cursor: pointer; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px;">
+                    <input type="radio" name="dataSource" value="adafruit" onchange="setDataSource('adafruit')"
+                        id="radioAdafruit">
+                    <div>
+                        <div style="font-weight: bold;">Adafruit IO (Cloud)</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">Via le backend local Bridge</div>
+                    </div>
+                </label>
+            </div>
+
+            <div
+                style="margin-top: 15px; font-size: 0.75rem; color: var(--accent-blue); background: rgba(0,122,255,0.1); padding: 10px; border-radius: 5px;">
+                ℹ️ Utilisez 'Adafruit IO' pour voir le chariot à distance via Internet.
+            </div>
+            <!-- Calibration Section -->
+            <div id="sectionCalib" style="display: none;">
+                <div class="calib-selector">
+                    <div class="calib-tab active" id="tabFuel" onclick="switchCalibTab('fuel')">⛽ Carburant</div>
+                    <div class="calib-tab" id="tabTemp" onclick="switchCalibTab('temp')">🌡️ Température</div>
+                </div>
+
+                <!-- Fuel Calibration -->
+                <div class="calibration-group" id="groupFuel">
+                    <div class="color-label" style="font-size: 0.8rem; opacity: 0.8;">Carburant (Actuel: <span
+                            id="rawFuelRes" class="calib-raw-value">0</span> Ω)</div>
+                    <div class="calib-row">
+                        <span>Capacité (L)</span>
+                        <input type="number" class="calib-input" id="calibFuelTank" value="60"
+                            onchange="saveCalibration()">
+                    </div>
+                    <div class="calib-row">
+                        <span>Vide (Min Ω)</span>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <input type="number" class="calib-input" id="calibFuelEmpty" value="12" placeholder="Ω"
+                                onchange="saveCalibration()">
+                            <button class="calib-btn" onclick="setCurrentAs('fuelEmpty')">GET</button>
+                        </div>
+                    </div>
+                    <div class="calib-row">
+                        <span>Plein (Max Ω)</span>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <input type="number" class="calib-input" id="calibFuelFull" value="166" placeholder="Ω"
+                                onchange="saveCalibration()">
+                            <button class="calib-btn" onclick="setCurrentAs('fuelFull')">GET</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Temp Calibration (Resistive) -->
+                <div class="calibration-group" id="groupTemp" style="display: none;">
+                    <div class="color-label" style="font-size: 0.8rem; opacity: 0.8;">Température (Actuel: <span
+                            id="rawTempRes" class="calib-raw-value">0</span> Ω)</div>
+
+                    <div class="calib-row">
+                        <span>BETA Coeff.</span>
+                        <input type="number" class="calib-input" id="calibTempBeta" value="3950"
+                            onchange="saveCalibration()">
+                    </div>
+                    <div class="calib-row">
+                        <span>R0 (25°C)</span>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <input type="number" class="calib-input" id="calibTempR0" value="3025"
+                                onchange="saveCalibration()">
+                            <button class="calib-btn" onclick="setCurrentAs('tempR0')">GET</button>
+                        </div>
+                    </div>
+                    <div class="calib-row">
+                        <span>Offset (°C)</span>
+                        <input type="number" class="calib-input" id="calibTempOffset" value="0"
+                            onchange="saveCalibration()">
+                    </div>
+                </div>
+
+                <div style="margin-top: 25px;">
+                    <button class="theme-btn"
+                        style="width: 100%; text-align: center; background: rgba(255, 59, 48, 0.2); border-color: #ff3b30;"
+                        onclick="calibrateSensors()">
+                        🧹 RESET DASHBOARD
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scroll Indicator -->
+        <div class="scroll-indicator">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M19 12l-7 7-7-7" />
+            </svg>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="charts-section">
+            <h2>📊 Historique des Données</h2>
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3>🌡️ Température Moteur</h3>
+                    <canvas id="tempChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>🛢️ Pression d'Huile</h3>
+                    <canvas id="oilChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>⛽ Niveau Carburant</h3>
+                    <canvas id="fuelChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3D Model Container (Hidden/Background) -->
+        <div class="model-viewer"
+            style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 600px; height: 400px; z-index: -1; opacity: 0.3; pointer-events: none;">
+            <canvas id="modelCanvas"></canvas>
+        </div>
+
+        <!-- Template for 3D model if needed -->
+</body>
+
+</html>
