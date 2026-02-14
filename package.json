@@ -1,10 +1,9 @@
 {
   "name": "adafruit-bridge",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Forklift Dashboard Backend",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node api/telemetry.js"
   },
   "keywords": [],
   "author": "",
