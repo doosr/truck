@@ -1,14 +1,27 @@
 {
     "version": 2,
-    "cleanUrls": true,
+    "builds": [
+        {
+            "src": "index.js",
+            "use": "@vercel/node"
+        },
+        {
+            "src": "index.html",
+            "use": "@vercel/static"
+        },
+        {
+            "src": "*.{png,jpg,js,css}",
+            "use": "@vercel/static"
+        }
+    ],
     "rewrites": [
         {
-            "source": "/api/(.*)",
-            "destination": "/api/$1"
+            "source": "/api/telemetry",
+            "destination": "index.js"
         },
         {
             "source": "/(.*)",
-            "destination": "/index.html"
+            "destination": "index.js"
         }
     ]
 }
