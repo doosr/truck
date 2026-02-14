@@ -1838,6 +1838,9 @@
                     // Update dashboard first using current telemetryData as "previous" state
                     updateDashboard(data);
 
+                    // Update Unity Twin
+                    updateUnityTwin(data);
+
                     // Now update the global telemetryData for the next cycle
                     telemetryData = data;
 
